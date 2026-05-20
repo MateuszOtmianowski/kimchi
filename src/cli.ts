@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent"
+import { getCliModeArg, isHelpOrVersionArgs } from "./cli-args.js"
 import { dispatchSubcommand } from "./commands/dispatch.js"
 import {
 	DEFAULT_SKILL_PATHS,
@@ -30,6 +31,7 @@ import loopGuardExtension from "./extensions/loop-guard.js"
 import lspExtension from "./extensions/lsp.js"
 import mcpAdapterExtension from "./extensions/mcp-adapter/index.js"
 import modelSwitchExtension from "./extensions/model-switch.js"
+import { createSessionModeOnboardingForStartup } from "./extensions/onboarding/session-mode-startup.js"
 import permissionsExtension from "./extensions/permissions/index.js"
 import { reserveShiftTabForPermissions } from "./extensions/permissions/keybindings.js"
 import promptEnrichmentExtension from "./extensions/prompt-construction/prompt-enrichment.js"
@@ -63,8 +65,13 @@ let sessionStarted = false
 // stderr via console.log = console.error inside runAcpMode) is noise in IDE
 // logs and not actionable — the IDE owns session continuation. Decide once,
 // at module load, before anything else runs.
-const acpMode = isAcpMode(process.argv.slice(2))
+const cliMode = getCliModeArg(process.argv.slice(2))
+const acpMode = cliMode === "acp"
 const helpOrVersion = isHelpOrVersionArgs(process.argv.slice(2))
+
+// Internal control signal: setup cancellation must skip harness/extensions
+// without a hard process.exit(), so clack can restore terminal state normally.
+class SetupCancelled extends Error {}
 
 process.on("exit", (code) => {
 	// Only print the resume hint after a real harness session ran. Subcommands
@@ -93,25 +100,6 @@ function sessionIdCaptureExtension(pi: ExtensionAPI) {
 			// ignore — exit handler falls back to --continue
 		}
 	})
-}
-
-// Intentionally minimal pre-dispatch sniff: we need to know whether to enter
-// ACP stdio mode BEFORE pi-mono's main() takes over (which would otherwise
-// print a banner, wire up the TUI, and corrupt the JSON-RPC stream). The
-// canonical --mode parser lives in pi-mono; this only looks for the one value
-// that forces a different entrypoint. Don't extend this sniff for new flags —
-// thread them through pi-mono's parser instead.
-function isHelpOrVersionArgs(args: string[]): boolean {
-	return args.some((a) => a === "--help" || a === "-h" || a === "--version" || a === "-v")
-}
-
-function isAcpMode(args: string[]): boolean {
-	for (let i = 0; i < args.length; i++) {
-		const a = args[i]
-		if (a === "--mode" && args[i + 1] === "acp") return true
-		if (a === "--mode=acp") return true
-	}
-	return false
 }
 
 try {
@@ -158,6 +146,11 @@ try {
 				writeMigrationState("done")
 			} else {
 				const result = await runSetupWizard({ needsSkillsSetup, needsMigrationCheck })
+				if (result.cancelled) {
+					sessionStarted = false
+					process.exitCode = 130
+					throw new SetupCancelled()
+				}
 				if (needsSkillsSetup) {
 					skillPaths = result.skillPaths
 					writeSkillPaths(skillPaths)
@@ -283,6 +276,12 @@ try {
 		}
 
 		const rawArgs = process.argv.slice(2)
+		const sessionModeOnboarding = createSessionModeOnboardingForStartup({
+			rawArgs,
+			nonInteractiveMode: acpMode,
+			stdinIsTTY: process.stdin.isTTY === true,
+			stdoutIsTTY: process.stdout.isTTY === true,
+		})
 
 		const extensionFactories = [
 			startupUpdateExtension,
@@ -306,6 +305,7 @@ try {
 			hideThinkingExtension,
 			clipboardImageExtension,
 			uiExtension,
+			sessionModeOnboarding,
 			agentsExtension,
 			tagsExtension,
 			telemetryExtension(telemetryConfig),
@@ -328,6 +328,10 @@ try {
 		}
 	}
 } catch (err) {
-	console.error(err instanceof Error ? err.message : String(err))
-	process.exit(1)
+	if (err instanceof SetupCancelled) {
+		process.exitCode = 130
+	} else {
+		console.error(err instanceof Error ? err.message : String(err))
+		process.exit(1)
+	}
 }
