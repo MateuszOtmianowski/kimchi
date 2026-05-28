@@ -23,7 +23,6 @@ import { isBunBinary } from "./env.js"
 import activityExtension from "./extensions/activity.js"
 import agentsExtension from "./extensions/agents/index.js"
 import assistantPrefixExtension from "./extensions/assistant-prefix.js"
-import bashCollapseExtension from "./extensions/bash-collapse.js"
 import behavioursExtension from "./extensions/behaviours/index.js"
 import clipboardImageExtension from "./extensions/clipboard-image.js"
 import explorationGuardExtension from "./extensions/exploration-guard.js"
@@ -43,6 +42,7 @@ import { writeKimchiKeybindingDefaults } from "./extensions/permissions/keybindi
 import promptEnrichmentExtension from "./extensions/prompt-construction/prompt-enrichment.js"
 import promptSummaryExtension from "./extensions/prompt-summary.js"
 import questionnaireExtension from "./extensions/questionnaire.js"
+import rtkRewriteExtension from "./extensions/rtk-rewrite.js"
 import shutdownMarkerExtension from "./extensions/shutdown-marker.js"
 import startupUpdateExtension from "./extensions/startup-update.js"
 import statsExtension from "./extensions/stats/index.js"
@@ -472,7 +472,7 @@ try {
 			] satisfies ManagedExtensionFactory[]),
 			questionnaireExtension,
 			promptEnrichmentExtension(skillPaths),
-			bashCollapseExtension,
+			rtkRewriteExtension,
 			permissionsExtension,
 			resourcesExtension,
 			resourceToolBlockerExtension,
