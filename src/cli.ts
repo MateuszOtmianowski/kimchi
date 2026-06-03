@@ -47,6 +47,7 @@ import modelSwitchExtension from "./extensions/model-switch.js"
 import { createSessionModeOnboardingForStartup } from "./extensions/onboarding/session-mode-startup.js"
 import permissionsExtension from "./extensions/permissions/index.js"
 import { writeKimchiKeybindingDefaults } from "./extensions/permissions/keybindings.js"
+import { installPiNativeCompatibilityShim } from "./extensions/pi-package-lookup/native-compat.js"
 import promptEnrichmentExtension from "./extensions/prompt-construction/prompt-enrichment.js"
 import promptSummaryExtension from "./extensions/prompt-summary.js"
 import questionnaireExtension from "./extensions/questionnaire.js"
@@ -89,6 +90,7 @@ import { getVersion } from "./utils.js"
 import { injectTraceIdsIntoEntries, injectTraceIdsIntoExport } from "./utils/trace-id-export.js"
 
 installCloudflare524RetryPatch()
+installPiNativeCompatibilityShim()
 
 function getSubcommand(args: string[]): string {
 	if (args.includes("--version") || args.includes("-v")) return "version"
